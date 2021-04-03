@@ -19,9 +19,8 @@ vr::EVRInitError ExampleDriver::VRDriver::Init(vr::IVRDriverContext* pDriverCont
     // Add a couple controllers
     //this->AddDevice(std::make_shared<ControllerDevice>("Example_ControllerDevice_Left", ControllerDevice::Handedness::LEFT));
     //this->AddDevice(std::make_shared<ControllerDevice>("Example_ControllerDevice_Right", ControllerDevice::Handedness::RIGHT));
-    
-    std::string inPipeName = "\\\\.\\pipe\\ApriltagPipeIn";
 
+    /*
     inPipe = CreateNamedPipeA(inPipeName.c_str(),
         PIPE_ACCESS_DUPLEX,
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE |PIPE_WAIT,   // FILE_FLAG_FIRST_PIPE_INSTANCE is not needed but forces CreateNamedPipe(..) to fail if the pipe already exists...
@@ -30,6 +29,9 @@ vr::EVRInitError ExampleDriver::VRDriver::Init(vr::IVRDriverContext* pDriverCont
         1024 * 16,
         NMPWAIT_USE_DEFAULT_WAIT,
         NULL);
+    */
+
+    mkfifo(inPipeName.c_str(), 0666);
 
     //if pipe was successfully created wait for a connection
     //ConnectNamedPipe(inPipe, NULL);
@@ -53,13 +55,200 @@ void ExampleDriver::VRDriver::Cleanup()
 void ExampleDriver::VRDriver::PipeThread()
 {
     char buffer[1024];
-    DWORD dwWritten;
-    DWORD dwRead;
+    // DWORD dwWritten;
+    // DWORD dwRead;
 
     for (;;) 
     {
-        ConnectNamedPipe(inPipe, NULL);
+        //ConnectNamedPipe(inPipe, NULL);
         //MessageBoxA(NULL, "connected", "Example Driver", MB_OK);
+
+        inPipe = open(inPipeName.c_str(), O_RDONLY);
+
+        for (;;)
+        {
+            ssize_t len = read(inPipe, buffer, sizeof(buffer) - 1);
+            if (len < 0) {
+              Log("Read error!");
+              break;
+            }
+            buffer[len] = '\0';
+            Log(std::string("Read: ") + buffer);
+            
+            std::string rec = buffer;
+            std::istringstream iss(rec);
+            std::string word;
+
+            std::string s = "";
+
+            while (iss >> word)
+            {
+                if (word == "addtracker")
+                {
+                    //MessageBoxA(NULL, word.c_str(), "Example Driver", MB_OK);
+                    auto addtracker = std::make_shared<TrackerDevice>("AprilTracker" + std::to_string(this->trackers_.size()));
+                    this->AddDevice(addtracker);
+                    this->trackers_.push_back(addtracker);
+                    s = s + " added";
+                }
+                if (word == "addstation")
+                {
+                    auto addstation = std::make_shared<TrackingReferenceDevice>("AprilCamera" + std::to_string(this->devices_.size()));
+                    this->AddDevice(addstation);
+                    this->stations_.push_back(addstation);
+                    s = s + " added";
+                }
+                else if (word == "updatestation")
+                {
+                    int idx;
+                    double a, b, c, qw, qx, qy, qz;
+                    iss >> idx; iss >> a; iss >> b; iss >> c; iss >> qw; iss >> qx; iss >> qy; iss >> qz;
+
+                    if (idx < this->stations_.size())
+                    {
+                        this->stations_[idx]->UpdatePose(a, b, c, qw, qx, qy, qz);
+                        s = s + " updated";
+                    }
+                    else
+                    {
+                        s = s + " idinvalid";
+                    }
+
+                }
+                else if (word == "synctime")
+                {
+                    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+                    s = s + " " + std::to_string(this->frame_timing_avg_);
+                    s = s + " " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(now - this->last_frame_time_).count());
+                }
+                else if (word == "updatepose")
+                {
+                    int idx;
+                    double a, b, c, qw, qx, qy, qz, time, smoothing;
+                    iss >> idx; iss >> a; iss >> b; iss >> c; iss >> qw; iss >> qx; iss >> qy; iss >> qz; iss >> time; iss >> smoothing;
+
+                    if (idx < this->trackers_.size())
+                    {
+                        this->trackers_[idx]->UpdatePos(a, b, c, time, 1-smoothing);
+                        this->trackers_[idx]->UpdateRot(qw, qx, qy, qz, time, 1-smoothing);
+                        this->trackers_[idx]->Update();
+                        s = s + " updated";
+                    }
+                    else
+                    {
+                        s = s + " idinvalid";
+                    }
+
+                }
+                else if (word == "updatepos")
+                {
+                    int idx;
+                    double a, b, c, time, smoothing;
+                    iss >> idx; iss >> a; iss >> b; iss >> c; iss >> time; iss >> smoothing;
+
+                    if (idx < this->devices_.size())
+                    {
+                        this->trackers_[idx]->UpdatePos(a, b, c, time, smoothing);
+                        this->trackers_[idx]->Update();
+                        s = s + " updated";
+                    }
+                    else
+                    {
+                        s = s + " idinvalid";
+                    }
+
+                }
+                else if (word == "updaterot")
+                {
+                    int idx;
+                    double qw, qx, qy, qz, time, smoothing;
+                    iss >> qw; iss >> qx; iss >> qy; iss >> qz; iss >> time; iss >> smoothing;
+
+                    if (idx < this->devices_.size())
+                    {
+                        this->trackers_[idx]->UpdateRot(qw, qx, qy, qz, time, smoothing);
+                        this->trackers_[idx]->Update();
+                        s = s + " updated";
+                    }
+                    else
+                    {
+                        s = s + " idinvalid";
+                    }
+
+                }
+                else if (word == "getdevicepose")
+                {
+                    int idx;
+                    iss >> idx;
+
+                    vr::TrackedDevicePose_t hmd_pose[10];
+                    vr::VRServerDriverHost()->GetRawTrackedDevicePoses(0, hmd_pose, 10);
+
+                    vr::HmdQuaternion_t q = GetRotation(hmd_pose[idx].mDeviceToAbsoluteTracking);
+                    vr::HmdVector3_t pos = GetPosition(hmd_pose[idx].mDeviceToAbsoluteTracking);
+
+                    s = s + " devicepose " + std::to_string(idx);
+                    s = s + " " + std::to_string(pos.v[0]) +
+                        " " + std::to_string(pos.v[1]) +
+                        " " + std::to_string(pos.v[2]) +
+                        " " + std::to_string(q.w) +
+                        " " + std::to_string(q.x) +
+                        " " + std::to_string(q.y) +
+                        " " + std::to_string(q.z);
+                }
+                else if (word == "gettrackerpose")
+                {
+                    int idx;
+                    iss >> idx;
+
+                    if (idx < this->devices_.size())
+                    {
+                        s = s + " trackerpose " + std::to_string(idx);
+                        vr::DriverPose_t pose = this->trackers_[idx]->GetPose();
+                        s = s + " " + std::to_string(pose.vecPosition[0]) +
+                            " " + std::to_string(pose.vecPosition[1]) +
+                            " " + std::to_string(pose.vecPosition[2]) +
+                            " " + std::to_string(pose.qRotation.w) +
+                            " " + std::to_string(pose.qRotation.x) +
+                            " " + std::to_string(pose.qRotation.y) +
+                            " " + std::to_string(pose.qRotation.z);
+                    }
+                    else
+                    {
+                        s = s + " idinvalid";
+                    }
+
+                }
+                else if (word == "numtrackers")
+                {
+                    s = s + " numtrackers " + std::to_string(this->trackers_.size());
+                }
+                else
+                {
+                    s = s + "  unrecognized";
+                }
+            }
+            
+            close(inPipe);
+
+            s = s + "  OK\0";
+
+            /*
+            DWORD dwWritten;
+            WriteFile(inPipe,
+                s.c_str(),
+                (s.length() + 1),   // = length of string + terminating '\0' !!!
+                &dwWritten,
+                NULL);
+            */
+            
+            inPipe = open(inPipeName.c_str(), O_WRONLY);
+            write(inPipe, s.c_str(), s.length() + 1);
+        }
+        
+        close(inPipe);
+        
+        /*
 
         //we go and read it into our buffer
         if (ReadFile(inPipe, buffer, sizeof(buffer) - 1, &dwRead, NULL) != FALSE)
@@ -234,12 +423,6 @@ void ExampleDriver::VRDriver::PipeThread()
                 NULL);
         }
         DisconnectNamedPipe(inPipe);
-        /*
-        }
-        else
-        {
-            Sleep(1);
-        }
         */
     }
 }

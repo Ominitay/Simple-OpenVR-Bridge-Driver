@@ -3,7 +3,11 @@
 
 #include <vector>
 #include <memory>
-#include <windows.h>
+// #include <windows.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <openvr_driver.h>
 
@@ -39,8 +43,9 @@ namespace ExampleDriver {
         virtual ~VRDriver() = default;
 
     private:
-        HANDLE inPipe;
-        HANDLE syncPipe;
+        int inPipe;
+        int syncPipe;
+        std::string inPipeName = "\\\\.\\pipe\\ApriltagPipeIn";
         std::vector<std::shared_ptr<IVRDevice>> devices_;
         std::vector<std::shared_ptr<TrackerDevice>> trackers_;
         std::vector<std::shared_ptr<TrackingReferenceDevice>> stations_;

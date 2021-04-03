@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <cmath>
+#include <algorithm>
+#include <strings.h>
 
 #include <linalg.h>
 

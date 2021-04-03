@@ -2,13 +2,14 @@
 
 #include <chrono>
 #include <cmath>
+#include <algorithm>
 
 #include <linalg.h>
 
 #include <Driver/IVRDevice.hpp>
 #include <Native/DriverFactory.hpp>
 
-#include <windows.h>
+// #include <windows.h>
 #include <thread>
 #include <sstream>
 #include <iostream>

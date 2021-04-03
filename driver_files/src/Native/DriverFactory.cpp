@@ -1,13 +1,13 @@
 #include "DriverFactory.hpp"
 #include <thread>
 #include <Driver/VRDriver.hpp>
-#include <Windows.h>
+// #include <Windows.h>
 #include <sstream>
 
 static std::shared_ptr<ExampleDriver::IVRDriver> driver;
 
 void* HmdDriverFactory(const char* interface_name, int* return_code) {
-	if (std::strcmp(interface_name, vr::IServerTrackedDeviceProvider_Version) == 0) {
+	if (strcasecmp(interface_name, vr::IServerTrackedDeviceProvider_Version) == 0) {
 		if (!driver) {
 			// Instantiate concrete impl
 			driver = std::make_shared<ExampleDriver::VRDriver>();

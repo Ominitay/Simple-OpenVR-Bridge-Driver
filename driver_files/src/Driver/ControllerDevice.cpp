@@ -1,5 +1,5 @@
 #include "ControllerDevice.hpp"
-#include <Windows.h>
+// #include <Windows.h>
 
 ExampleDriver::ControllerDevice::ControllerDevice(std::string serial, ControllerDevice::Handedness handedness):
     serial_(serial),
@@ -54,7 +54,7 @@ void ExampleDriver::ControllerDevice::Update()
         linalg::vec<float, 4> hmd_rotation{ (float)hmd_pose.qRotation.x, (float)hmd_pose.qRotation.y, (float)hmd_pose.qRotation.z, (float)hmd_pose.qRotation.w };
 
         // Do shaking animation if haptic vibration was requested
-        float controller_y = -0.2f + 0.01f * std::sinf(8 * 3.1415f * vibrate_anim_state_);
+        float controller_y = -0.2f + 0.01f * ::sinf(8 * 3.1415f * vibrate_anim_state_);
 
         // Left hand controller on the left, right hand controller on the right, any other handedness sticks to the middle
         float controller_x = this->handedness_ == Handedness::LEFT ? -0.2f : (this->handedness_ == Handedness::RIGHT ? 0.2f : 0.f);
@@ -77,14 +77,14 @@ void ExampleDriver::ControllerDevice::Update()
 
     // Check if we need to press any buttons (I am only hooking up the A button here but the process is the same for the others)
     // You will still need to go into the games button bindings and hook up each one (ie. a to left click, b to right click, etc.) for them to work properly
-    if (GetAsyncKeyState(0x45 /* E */) != 0) {
-        GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_click_component_, true, 0);
-        GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_touch_component_, true, 0);
-    }
-    else {
-        GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_click_component_, false, 0);
-        GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_touch_component_, false, 0);
-    }
+    // if (GetAsyncKeyState(0x45 /* E */) != 0) {
+    //     GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_click_component_, true, 0);
+    //     GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_touch_component_, true, 0);
+    // }
+    // else {
+    //     GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_click_component_, false, 0);
+    //     GetDriver()->GetInput()->UpdateBooleanComponent(this->a_button_touch_component_, false, 0);
+    // }
 
     // Post pose
     GetDriver()->GetDriverHost()->TrackedDevicePoseUpdated(this->device_index_, pose, sizeof(vr::DriverPose_t));
